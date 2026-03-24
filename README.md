@@ -42,9 +42,9 @@ Override with CLI flags on each script if your layout differs (`--csv`, `--image
 
 The preparation script expects a **header row** and at least these columns:
 
-- `image_path` — any path string whose **last two segments** are `ClassName/filename` (e.g. Kaggle-style `.../Other/abc.jpg` works; only `Other/abc.jpg` is used to find `Fundus Dataset/.../Other/abc.*`).
-- `class` — class name string (must match a subfolder under the raw images root).
-- `label_encoded` — integer label (carried through to `dataset_resnet.csv`).
+- `image_path`: any path string whose **last two segments** are `ClassName/filename` (e.g. Kaggle-style `.../Other/abc.jpg` works; only `Other/abc.jpg` is used to find `Fundus Dataset/.../Other/abc.*`).
+- `class`: class name string (must match a subfolder under the raw images root).
+- `label_encoded`: integer label (carried through to `dataset_resnet.csv`).
 
 After step 1, `dataset_resnet.csv` (or your `--output-csv`) uses the same columns with updated `image_path` pointing at normalized JPGs.
 
@@ -159,4 +159,4 @@ See **[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)** for round-by-round results, negat
 
 ## License / data
 
-This repository contains **code only**. Fundus images and label files are **not** redistributed here. Follow your data provider’s terms and your institution’s policy when publishing.
+This repository contains **code only**. Fundus images and label files are **not** redistributed here. Follow your data provider's terms and your institution's policy when publishing.

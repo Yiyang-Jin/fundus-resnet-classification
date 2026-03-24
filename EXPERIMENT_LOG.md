@@ -2,7 +2,7 @@
 
 This log tracks training rounds, observed issues, applied fixes, and outcomes.
 
-> **Repository note:** This file is the full chronological log copied from the coursework workspace. The **recommended default** in `train_resnet18.py` uses `mixup_alpha=0.2` (restored after a failed `0.1` trial).
+> **Note:** Training defaults in `train_resnet18.py` use `mixup_alpha=0.2`. A weaker `mixup_alpha=0.1` trial was run and rejected (see Round 12).
 
 ## Round 1 - Baseline (Overfitting Observed)
 
@@ -317,7 +317,7 @@ This log tracks training rounds, observed issues, applied fixes, and outcomes.
 ## Round 11 - Plateau Scheduler, No Early Stopping (Sanity Check)
 
 ### Motivation
-- Rule out “forced early stop” as the reason for not reaching `0.79+` on a given seed.
+- Rule out "forced early stop" as the reason for not reaching `0.79+` on a given seed.
 
 ### Setup
 - Identical to Round 10 except `--early-stop-patience 999` (train full `30` epochs).
@@ -344,7 +344,7 @@ This log tracks training rounds, observed issues, applied fixes, and outcomes.
 - Same pipeline as Round 10/11 but `mixup_alpha=0.1`.
 
 ### Observation (run stopped by user ~epoch 22)
-- Validation accuracy stayed in roughly `0.75–0.77` while train accuracy rose into `~0.83+`, indicating a less favorable train/val gap vs `mixup_alpha=0.2`.
+- Validation accuracy stayed in roughly `0.75-0.77` while train accuracy rose into `~0.83+`, indicating a less favorable train/val gap vs `mixup_alpha=0.2`.
 
 ### Decision
 - **Rejected.** Restore default and recommended setting **`mixup_alpha=0.2`** in `train_resnet18.py`.
@@ -374,3 +374,9 @@ This log tracks training rounds, observed issues, applied fixes, and outcomes.
 ### Practical takeaway
 - **Publish / reproduce:** prefer **`mixup_alpha=0.2`**, A-preprocess, `ReduceLROnPlateau`, and full-unfreeze LR scales **`0.5`** for the strongest observed test accuracy; use **`0.45`** if you want a slightly more conservative fine-tune (small accuracy trade-off in our runs).
 - **Do not use** for this pipeline: heavy TTA, `layer4` SE (as implemented), focal/Glaucoma-weight trial, or `mixup_alpha=0.1`.
+
+---
+
+## Repository
+
+Source tree: [github.com/Yiyang-Jin/fundus-resnet-classification](https://github.com/Yiyang-Jin/fundus-resnet-classification).
