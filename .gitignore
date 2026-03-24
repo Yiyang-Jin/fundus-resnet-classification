@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Training outputs (large / regenerable; keep directory via .gitkeep)
+checkpoints/*.pth
+checkpoints/*.png
+checkpoints/*.csv
+checkpoints/*.json
+
+# Generated data and intermediates (do not commit raw fundus images or full CSVs)
+resnet_images_jpg/
+resnet_data/
+resnet_data_aug/
+resnet_data_aug_320/
+splits/
+splits_320/
+dataset_resnet.csv
+dataset_resnet_320.csv
+
+# Optional: keep a tiny sample CSV by renaming; by default ignore heavy label files
+dataset.csv
+
+# Windows
+Thumbs.db
+Desktop.ini
