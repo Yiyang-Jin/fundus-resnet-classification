@@ -1,138 +1,162 @@
 # Fundus Image Classification (ResNet-18 / ResNet-34)
 
-PyTorch pipeline for **stratified splitting**, **offline augmentation**, and **transfer learning** on a multi-class fundus dataset. The training script targets `torchvision` ResNet models with optional asymmetric green-channel preprocessing, MixUp, AMP, and progressive unfreezing.
+PyTorch pipeline for **stratified splitting**, **offline augmentation**, and **transfer learning** on a multi-class fundus dataset. The training script uses `torchvision` ResNet with optional asymmetric green-channel preprocessing, MixUp, AMP, and progressive unfreezing.
 
-> **This folder** is the GitHub-ready copy: scripts, `requirements.txt`, `.gitignore`, and documentation. **Do not commit** raw images, large CSVs, or `.pth` weights (see `.gitignore`).
+> **This repository** ships **code and docs only**. Raw images, large CSVs, and `.pth` checkpoints are **not** included (see `.gitignore`). Obtain data under your own license and run the pipeline locally.
 
 ## Features
 
-- Normalize images to RGB JPG and fixed spatial size (`prepare_resnet_images.py`, configurable `--size`).
+- Normalize images to RGB JPG and fixed spatial size (`prepare_resnet_images.py`, `--size`).
 - Per-class stratified split **80% / 10% / 10%** (`split_dataset.py`).
 - Standard `ImageFolder` layout (`build_split_dirs.py`).
-- Offline train augmentation: **3×** samples per training image (original + left/right random rotation 10–20° before resize) (`build_augmented_trainset.py`).
-- Training: pretrained ResNet-18 or ResNet-34, dropout head, label smoothing, optional noise, **MixUp** (`--mixup-alpha`, default **`0.2`**), **ReduceLROnPlateau** or cosine schedule, early stopping, layer-wise LR, optional class drops, optional SE blocks, optional A-preprocess.
-- Optional **test-time augmentation** evaluation (`evaluate_tta.py`).
+- Offline train augmentation: **3×** training images (original + left/right random rotation in `[10°, 20°]` on the **raw** image, then resize) (`build_augmented_trainset.py`).
+- Training: pretrained ResNet-18/34, dropout on the head, label smoothing, optional Gaussian noise, **MixUp** (default `--mixup-alpha 0.2`), **ReduceLROnPlateau** or cosine schedule, early stopping, layer-wise LR, optional `--drop-classes`, optional SE blocks, optional A-preprocess.
+- Optional **test-time augmentation** (`evaluate_tta.py`).
 
 ## Requirements
 
-- Python 3.10+ recommended  
-- NVIDIA GPU with CUDA (optional but expected for reasonable training time)  
-- Install:
+- **Python 3.10+** recommended.
+- **NVIDIA GPU + CUDA** strongly recommended (training uses AMP by default).
+- Install Python deps:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-PyTorch: install a build that matches your CUDA version from [pytorch.org](https://pytorch.org) if the default wheel is not suitable.
+Install a **PyTorch** wheel that matches your CUDA version from [pytorch.org](https://pytorch.org) if `pip install torch` is not correct for your machine.
 
-## Expected data layout
+## Input data you must provide
 
-Place your repository root **next to** the scripts (this folder), or pass paths via CLI flags.
+### Directory layout (defaults)
 
-**Raw data (example):**
+Place the repo root as the working directory. Expected defaults:
 
-- `Fundus Dataset/Fundus Dataset/<ClassName>/*.{jpg,png,...}`
-- Label file: `dataset.csv` (paths and class labels as produced by your dataset)
+| Item | Default path | Purpose |
+|------|----------------|--------|
+| Label CSV | `dataset.csv` | Master list of images + class names |
+| Raw images | `Fundus Dataset/Fundus Dataset/<ClassName>/` | Original files (any extension PIL can read) |
 
-**Classes in the original project:** `AMD`, `Cataract`, `Diabetes`, `Glaucoma`, `Hypertension`, `Myopia`, `Normal`, `Other`.
+Override with CLI flags on each script if your layout differs (`--csv`, `--images-root` in `prepare_resnet_images.py`, etc.).
 
-The **recommended production setting** for this codebase’s experiments uses **6 classes** by dropping `Other` and `Diabetes` at train time (`--drop-classes "Other,Diabetes"`). Adjust if your task requires all 8 classes.
+### `dataset.csv` format
 
-## Pipeline (run from this directory)
+The preparation script expects a **header row** and at least these columns:
 
-### 1) Normalize images for ResNet
+- `image_path` — any path string whose **last two segments** are `ClassName/filename` (e.g. Kaggle-style `.../Other/abc.jpg` works; only `Other/abc.jpg` is used to find `Fundus Dataset/.../Other/abc.*`).
+- `class` — class name string (must match a subfolder under the raw images root).
+- `label_encoded` — integer label (carried through to `dataset_resnet.csv`).
 
-Default output: `224×224` JPG + `dataset_resnet.csv`.
+After step 1, `dataset_resnet.csv` (or your `--output-csv`) uses the same columns with updated `image_path` pointing at normalized JPGs.
+
+### Classes (original project)
+
+`AMD`, `Cataract`, `Diabetes`, `Glaucoma`, `Hypertension`, `Myopia`, `Normal`, `Other`.
+
+The **documented best setup** trains on **6 classes** by dropping `Other` and `Diabetes` at runtime: `--drop-classes "Other,Diabetes"`. Use all 8 classes by omitting `--drop-classes` (expect different metrics).
+
+---
+
+## Reproduce training (end-to-end)
+
+Run **from the repository root** (the folder that contains the `.py` files).
+
+**Reproducibility:** splits and augmentation use **seed 42** by default (`split_dataset.py`, `build_augmented_trainset.py`, `train_resnet18.py --seed 42`). Keep the same seed for comparable numbers.
+
+### A) Full pipeline at **320×320** (matches reported experiments)
+
+Use separate folders for 320 so you do not overwrite 224 outputs:
+
+```bash
+# 1) Normalize to JPG 320×320
+python prepare_resnet_images.py --size 320 --output-dir resnet_images_jpg_320 --output-csv dataset_resnet_320.csv
+
+# 2) Stratified split
+python split_dataset.py --input-csv dataset_resnet_320.csv --output-dir splits_320
+
+# 3) ImageFolder layout (train/val/test)
+python build_split_dirs.py --images-dir resnet_images_jpg_320 --splits-dir splits_320 --output-dir resnet_data_320
+
+# 4) Offline 3× train augmentation (reads raw images + train.csv; copies val/test)
+python build_augmented_trainset.py --size 320 --splits-dir splits_320 --base-data-dir resnet_data_320 --output-dir resnet_data_aug_320
+
+# 5) Train (6-class, A-preprocess, MixUp 0.2, plateau)
+python train_resnet18.py --model-name resnet18 --seed 42 --epochs 30 --batch-size 24 --data-root resnet_data_aug_320 --img-size 320 --noise-prob 0.3 --noise-std 0.02 --num-workers 4 --prefetch-factor 1 --freeze-epochs 4 --layer4-only-epochs 3 --mixup-alpha 0.2 --full-head-lr-scale 0.5 --full-backbone-lr-scale 0.5 --drop-classes "Other,Diabetes" --use-a-preprocess --a-green-alpha 0.35 --a-green-gain 1.15 --scheduler plateau
+```
+
+**Windows:** `--num-workers 4 --prefetch-factor 1` avoids common worker/RAM issues. On Linux with enough RAM, you may raise `num_workers` (script default is `8`).
+
+**VRAM:** If CUDA OOM, lower `--batch-size` (e.g. 16).
+
+**Slightly gentler full-unfreeze LR** (alternative from the log):  
+`--full-head-lr-scale 0.45 --full-backbone-lr-scale 0.45`
+
+**Disable early stopping** (sanity check): append `--early-stop-patience 999`
+
+### B) Default **224×224** pipeline (smaller disk / faster)
 
 ```bash
 python prepare_resnet_images.py
-```
-
-For the **320×320** pipeline used in the best reported runs:
-
-```bash
-python prepare_resnet_images.py --size 320 --out-dir resnet_images_jpg_320 --out-csv dataset_resnet_320.csv
-```
-
-(Adjust `--raw-root` / `--csv` if your paths differ.)
-
-### 2) Stratified split
-
-```bash
 python split_dataset.py
-```
-
-Use `--input-csv` / `--out-dir` if you used non-default names for the 320 pipeline.
-
-### 3) Build folder layout
-
-```bash
 python build_split_dirs.py
-```
-
-### 4) Offline-augmented training set
-
-```bash
 python build_augmented_trainset.py
+python train_resnet18.py --data-root resnet_data_aug --img-size 224 --epochs 30 --batch-size 32
 ```
 
-For 320-based trees, pass matching `--size`, `--splits-dir`, `--base-data-dir`, and `--output-dir` (e.g. `resnet_data_aug_320`).
+Tune regularization and `--drop-classes` as needed; defaults are documented below.
 
-### 5) Train
+---
 
-**Windows:** if you see worker or memory errors, use `--num-workers 4` and `--prefetch-factor 1` (as in the commands below).
+## Training outputs
 
-**Strongest observed configuration (6 classes, A-preprocess, MixUp 0.2, plateau, LR scales 0.5):**
+Under `checkpoints/` (or `--output-dir`):
+
+| File | Description |
+|------|-------------|
+| `best_<model_name>.pth` | Best weights by **validation accuracy** (e.g. `best_resnet18.pth`) |
+| `train_meta.json` | Classes, hyperparameters, `best_val_acc`, `test_acc`, etc. |
+| `history.csv` | Per-epoch metrics |
+| `training_curves.png` | Loss/accuracy curves |
+| `test_confusion_matrix.png` | Test-set confusion matrix |
+
+---
+
+## Optional: test-time augmentation
+
+Requires a finished training run so `train_meta.json` and the checkpoint exist. The script reads **`img_size`**, **A-preprocess flags**, and **`drop_classes`** from `train_meta.json` so evaluation matches training.
 
 ```bash
-python train_resnet18.py --model-name resnet18 --epochs 30 --batch-size 24 --data-root "resnet_data_aug_320" --img-size 320 --noise-prob 0.3 --noise-std 0.02 --num-workers 4 --prefetch-factor 1 --freeze-epochs 4 --layer4-only-epochs 3 --mixup-alpha 0.2 --full-head-lr-scale 0.5 --full-backbone-lr-scale 0.5 --drop-classes "Other,Diabetes" --use-a-preprocess --a-green-alpha 0.35 --a-green-gain 1.15 --scheduler plateau
+python evaluate_tta.py --data-root resnet_data_aug_320 --checkpoint checkpoints/best_resnet18.pth --meta checkpoints/train_meta.json --tta-mode 5fold
 ```
 
-**Alternative fine-tune (slightly gentler full-unfreeze LR):** use `--full-head-lr-scale 0.45 --full-backbone-lr-scale 0.45` (see `EXPERIMENT_LOG.md`).
+Earlier project experiments often found **no TTA** better than TTA for this setup; see `EXPERIMENT_LOG.md`.
 
-**Train without early stopping** (e.g. sanity check):
+---
 
-```bash
-python train_resnet18.py ... --early-stop-patience 999
-```
+## Default hyperparameters (`train_resnet18.py`)
 
-### Outputs
+| Topic | Default |
+|--------|---------|
+| MixUp | `--mixup-alpha 0.2` |
+| Freeze schedule | `--freeze-epochs 4`, `--layer4-only-epochs 3` |
+| Regularization | `--dropout 0.4`, `--label-smoothing 0.1`, `--weight-decay 1e-3` |
+| Scheduler | `--scheduler plateau` |
+| Early stopping | `--early-stop-patience 4`, `--early-stop-min-delta 1e-3` |
+| Base LR groups | `--head-lr 5e-5`, `--backbone-lr 1e-5` |
+| Full-unfreeze scale | `--full-head-lr-scale 0.5`, `--full-backbone-lr-scale 0.5` |
+| Noise | `--noise-std 0.02`, `--noise-prob 0.3` |
+| Seed | `--seed 42` |
+| AMP | on; `--disable-amp` to turn off |
 
-Written under `checkpoints/` by default:
+Use `python train_resnet18.py --help` for the full list (SE blocks, focal loss, cosine scheduler, etc.).
 
-- `best_resnet18.pth` — best by validation accuracy  
-- `train_meta.json` — classes, hyperparameters, metrics  
-- `history.csv`, `training_curves.png`, `test_confusion_matrix.png`
-
-### Optional: TTA evaluation
-
-```bash
-python evaluate_tta.py --tta-mode 5fold
-```
-
-(Previous experiments on this project often favored **no TTA**; see log.)
-
-## Default hyperparameters (script defaults)
-
-Key defaults in `train_resnet18.py` include:
-
-- `--mixup-alpha 0.2`  
-- `--freeze-epochs 4`, `--layer4-only-epochs 3`  
-- `--dropout 0.4`, `--label-smoothing 0.1`, `--weight-decay 1e-3`  
-- `--scheduler plateau`  
-- `--early-stop-patience 4`  
-- Base LRs: `--head-lr 5e-5`, `--backbone-lr 1e-5`; after full unfreeze, scales `--full-head-lr-scale 0.5`, `--full-backbone-lr-scale 0.5`  
-
-Override any of these via CLI.
+---
 
 ## Experiment history
 
-See **[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)** for round-by-round results, failed trials (TTA, SE, focal loss, `mixup_alpha=0.1`), and the consolidated summary table.
+See **[EXPERIMENT_LOG.md](EXPERIMENT_LOG.md)** for round-by-round results, negative results (TTA, SE, focal loss, `mixup_alpha=0.1`), and a summary table.
+
+---
 
 ## License / data
 
-This repository contains **code only**. Fundus images and labels are **not** included. Use your institution’s data policy and licenses when publishing.
-
-## 中文说明（简要）
-
-本目录为可上传 **GitHub** 的独立副本：含全部脚本、`requirements.txt`、`.gitignore` 与英文文档。训练默认已恢复 **`mixup_alpha=0.2`**。原始数据与权重请勿提交；完整实验记录见 `EXPERIMENT_LOG.md`。
+This repository contains **code only**. Fundus images and label files are **not** redistributed here. Follow your data provider’s terms and your institution’s policy when publishing.
