@@ -1,24 +1,4 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-.venv/
-venv/
-env/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-
-# Training outputs (large / regenerable; keep directory via .gitkeep)
-checkpoints/*.pth
-checkpoints/*.png
-checkpoints/*.csv
-checkpoints/*.json
-
-# Generated data and intermediates (do not commit raw fundus images or full CSVs)
+# --- Project: data & checkpoints (do not commit raw fundus data or weights)
 resnet_images_jpg/
 resnet_data/
 resnet_data_aug/
@@ -27,10 +7,59 @@ splits/
 splits_320/
 dataset_resnet.csv
 dataset_resnet_320.csv
-
-# Optional: keep a tiny sample CSV by renaming; by default ignore heavy label files
 dataset.csv
+checkpoints/*.pth
+checkpoints/*.png
+checkpoints/*.csv
+checkpoints/*.json
+
+# Python
+__pycache__/
+*.py[codz]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / build
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDE & tools
+.idea/
+.vscode/
+*.swp
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Env & secrets
+.env
+.envrc
+.pypirc
 
 # Windows
 Thumbs.db
 Desktop.ini
+
+# Cursor (optional local AI ignore files)
+.cursorignore
+.cursorindexingignore
